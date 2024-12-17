@@ -101,7 +101,7 @@ from split_settings.tools import include
 
 from aap_eda.core.enums import RulebookProcessLogLevel
 from aap_eda.utils import str_to_bool
-
+from ansible_base.lib.dynamic_config.flags import get_component_flags
 default_settings_file = "/etc/eda/settings.yaml"
 
 settings = dynaconf.Dynaconf(
@@ -180,7 +180,6 @@ JWT_REFRESH_TOKEN_LIFETIME_DAYS = settings.get(
 # Application definition
 INSTALLED_APPS = [
     "daphne",
-    "flags",
     # Django apps
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -194,6 +193,7 @@ INSTALLED_APPS = [
     "ansible_base.rbac",
     "ansible_base.resource_registry",
     "ansible_base.jwt_consumer",
+    "ansible_base.feature_flags",
     # Local apps
     "aap_eda.api",
     "aap_eda.core",
@@ -201,7 +201,7 @@ INSTALLED_APPS = [
 
 # Defines feature flags, and their conditions.
 # See https://cfpb.github.io/django-flags/
-FLAGS = {}
+FLAGS = get_component_flags('eda')
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
