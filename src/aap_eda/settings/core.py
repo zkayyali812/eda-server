@@ -12,22 +12,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# Define all settings use internally, not exposed to users for overwriting.
-
-# Defines feature flags, and their conditions.
-# See https://cfpb.github.io/django-flags/
-FLAGS = {
-    "FEATURE_EDA_ANALYTICS_ENABLED": [
-        {
-            "condition": "boolean",
-            "value": False,
-        }
-    ]
-}
-
 INSTALLED_APPS = [
     "daphne",
-    "flags",
     # Django apps
     "django.contrib.auth",
     "django.contrib.contenttypes",
