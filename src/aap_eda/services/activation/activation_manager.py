@@ -82,6 +82,17 @@ class ActivationManager(StatusManager):
             store_debug_logs=getattr(db_instance, "store_debug_logs", False),
         )
 
+    def _instance_engine(self) -> ContainerEngine:
+        if not hasattr(self.container_engine, "for_namespace"):
+            return self.container_engine
+        namespace = self.latest_instance.activation_job_namespace
+        if not namespace:
+            raise engine_exceptions.ContainerEngineInitError(
+                f"Activation instance {self.latest_instance.id} has no "
+                "recorded job namespace."
+            )
+        return self.container_engine.for_namespace(namespace)
+
     def _update_started_time(self) -> None:
         """Update latest instance's started_at to now."""
         self.latest_instance.started_at = timezone.now()
@@ -286,7 +297,7 @@ class ActivationManager(StatusManager):
         log_handler = self.container_logger_class(latest_instance.id)
 
         try:
-            self.container_engine.cleanup(
+            self._instance_engine().cleanup(
                 latest_instance.activation_pod_id,
                 log_handler,
             )
@@ -323,7 +334,7 @@ class ActivationManager(StatusManager):
 
         if pod_id:
             with contextlib.suppress(engine_exceptions.ContainerNotFoundError):
-                container_status = self.container_engine.get_status(
+                container_status = self._instance_engine().get_status(
                     container_id=latest_instance.activation_pod_id,
                 )
 
@@ -666,10 +677,10 @@ class ActivationManager(StatusManager):
         self.set_latest_instance_status(ActivationStatus.ERROR, **kwargs)
         self._set_activation_pod_id(pod_id=None)
 
-    def _stop_instance(self):
+    def _stop_instance(self, raise_on_error=False):
         """Stop the latest activation instance."""
         self.set_latest_instance_status(ActivationStatus.STOPPING)
-        self._cleanup()
+        self._cleanup(raise_on_error=raise_on_error)
         self.set_latest_instance_status(ActivationStatus.STOPPED)
         self._set_activation_pod_id(pod_id=None)
 
@@ -713,7 +724,7 @@ class ActivationManager(StatusManager):
         if is_restart:
             self._increase_restart_count()
 
-    def stop(self):
+    def stop(self, raise_on_error=False):
         """User requested stop."""
         # Cancel any pending auto-restart regardless of current state.
         # This prevents a queued restart from firing after a user-initiated
@@ -751,7 +762,7 @@ class ActivationManager(StatusManager):
             return
 
         try:
-            self._stop_instance()
+            self._stop_instance(raise_on_error=raise_on_error)
 
         except engine_exceptions.ContainerEngineError as exc:
             msg = (
@@ -781,7 +792,7 @@ class ActivationManager(StatusManager):
             "Restart operation requested for activation id: "
             f"{self.db_instance.id} ",
         )
-        self.stop()
+        self.stop(raise_on_error=True)
 
         LOGGER.info(
             f"Activation manager activation id: {self.db_instance.id} "
@@ -1003,7 +1014,7 @@ class ActivationManager(StatusManager):
         """
         try:
             return (
-                self.container_engine.get_status(
+                self._instance_engine().get_status(
                     container_id=self.latest_instance.activation_pod_id,
                 ),
                 False,
@@ -1056,7 +1067,7 @@ class ActivationManager(StatusManager):
             return
 
         try:
-            self.container_engine.update_logs(
+            self._instance_engine().update_logs(
                 container_id=self.latest_instance.activation_pod_id,
                 log_handler=log_handler,
             )
@@ -1088,6 +1099,9 @@ class ActivationManager(StatusManager):
             "status": ActivationStatus.STARTING,
             "git_hash": git_hash,
             "organization": self.db_instance.organization,
+            "activation_job_namespace": getattr(
+                self.container_engine, "namespace", None
+            ),
         }
         args[f"{self.db_instance_type}"] = self.db_instance
         try:

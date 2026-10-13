@@ -13,6 +13,7 @@
 #  limitations under the License.
 
 import base64
+import copy
 import json
 import logging
 import os
@@ -105,6 +106,11 @@ class Engine(ContainerEngine):
         self.secret_name = f"{self.resource_prefix}-secret-{activation_id}"
         self.job_name = None
         self.pod_name = None
+
+    def for_namespace(self, namespace: str):
+        engine = copy.copy(self)
+        engine.namespace = namespace
+        return engine
 
     def start(self, request: ContainerRequest, log_handler: LogHandler) -> str:
         # TODO : Should this be compatible with the previous version

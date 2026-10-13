@@ -16,6 +16,26 @@ This operator is available in the [eda-server-operator repository](https://githu
 
 Look at the [eda-server-operator documentation](https://github.com/ansible/eda-server-operator#readme) for more information.
 
+### Moving rulebook Jobs to another namespace
+
+Activation workers stay in the EDA control plane namespace. Set
+`EDA_ACTIVATION_JOB_NAMESPACE` to place new rulebook Jobs and pods elsewhere;
+without it, they run in the worker namespace. Grant the worker ServiceAccount
+access to the target namespace and keep access to the old namespace until its
+Jobs are gone. Any ServiceAccount named by an activation must exist in the
+target namespace.
+
+Apply database migrations **before changing** `EDA_ACTIVATION_JOB_NAMESPACE`.
+The migration records the current namespace for existing activation instances.
+After changing the setting and rolling out the workers, restarting an enabled
+activation removes its old Job before creating one in the new namespace.
+Verify old Jobs and pods are gone before removing their RBAC. The same order
+applies when switching back to the default namespace.
+
+Ensure `EDA_WEBSOCKET_BASE_URL` and `EDA_WEBSOCKET_TOKEN_BASE_URL` resolve from
+the target namespace. In particular, bare Kubernetes Service names resolve in
+the pod's own namespace; use names qualified with the control plane namespace.
+
 ## Docker Compose
 
 ### Prerequisites

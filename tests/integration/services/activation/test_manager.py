@@ -35,6 +35,9 @@ from aap_eda.services.activation.engine.common import (
     ContainerEngine,
     ContainerRequest,
 )
+from aap_eda.services.activation.engine.kubernetes import (
+    Engine as KubernetesEngine,
+)
 from aap_eda.services.activation.status_manager import StatusManager
 
 
@@ -370,6 +373,19 @@ def test_start_first_run(
 
 
 @pytest.mark.django_db
+def test_new_instance_records_job_namespace(basic_activation):
+    engine = KubernetesEngine("1", "activation", client=MagicMock())
+    engine.namespace = "new-namespace"
+    manager = ActivationManager(basic_activation, container_engine=engine)
+
+    manager._create_activation_instance()
+
+    assert basic_activation.latest_instance.activation_job_namespace == (
+        "new-namespace"
+    )
+
+
+@pytest.mark.django_db
 def test_monitor_to_running_status(
     starting_activation: models.Activation,
     container_engine_mock: MagicMock,
@@ -591,6 +607,40 @@ def test_stop_running(
     assert running_activation.latest_instance.activation_pod_id is None
     assert running_activation.status_message == after_msg
     assert container_engine_mock.cleanup.called
+
+
+@pytest.mark.django_db
+def test_stop_cleans_up_in_instance_namespace(running_activation):
+    instance = running_activation.latest_instance
+    instance.activation_job_namespace = "old-namespace"
+    instance.save(update_fields=["activation_job_namespace"])
+    engine = KubernetesEngine("1", "activation", client=MagicMock())
+    engine.namespace = "new-namespace"
+    manager = ActivationManager(running_activation, container_engine=engine)
+
+    with patch.object(KubernetesEngine, "cleanup", autospec=True) as cleanup:
+        manager.stop()
+
+    assert cleanup.call_args.args[0].namespace == "old-namespace"
+    assert engine.namespace == "new-namespace"
+
+
+@pytest.mark.django_db
+def test_restart_does_not_start_when_cleanup_fails(
+    running_activation, failing_cleanup
+):
+    manager = ActivationManager(
+        running_activation, container_engine=failing_cleanup
+    )
+
+    with patch(SYSTEM_RESTART_PATH) as restart:
+        with pytest.raises(exceptions.ActivationStopError):
+            manager.restart()
+
+    restart.assert_not_called()
+    assert (
+        running_activation.latest_instance.activation_pod_id == "test-pod-id"
+    )
 
 
 @pytest.mark.django_db
